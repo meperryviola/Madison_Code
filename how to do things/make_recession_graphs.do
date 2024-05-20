@@ -77,8 +77,8 @@ tsline urate if ingraph==1 & rec_count==1
 forvalues i = 1/12 {
 	g temp_base`i' = initclaims if (sixprior==1 & rec_count==`i')
 	egen base`i' = total(temp_base`i')
-	g index`i' = initclaims/base`i'
-	g ppt`i' = index`i' - 1
+	g index`i' = 100*(initclaims/base`i') // THIS IS AN INDEX
+	g ppt`i' = (index`i' - 100) // THIS IS PERCENT CHANGED
 }
 
 
@@ -86,7 +86,7 @@ forvalues i = 1/12 {
 tsline index8 if ingraph==1 & rec_count==8
 tsline ppt8 if ingraph==1 & rec_count==8
 
-** NOTE: in order to get a vertical line at recession start month (t=0), I need to save firstmo as a local macro and then invoke it with yline in the tsline command
+
 
 
 
@@ -94,40 +94,45 @@ tsline ppt8 if ingraph==1 & rec_count==8
 forvalues i = 1/12 {
 	g temp_ubase`i' = urate if (sixprior==1 & rec_count==`i')
 	egen ubase`i' = total(temp_ubase`i')
-	g udif`i' = urate - ubase`i'
+	g uindex`i' = 100*(urate/ubase`i') // This is an index
+	g udif`i' = urate - ubase`i' // this is simple difference in the unemployment rate
+	g uppt`i' = uindex`i' - 100 // This is percent changed
 }
 
 ** test with one of the recessions
-tsline udif8 if ingraph==1 & rec_count==8
-
-
+// tsline udif8 if ingraph==1 & rec_count==8
+tsline uindex8 if ingraph==1 & rec_count==8
+tsline uppt8 if ingraph==1 & rec_count==8
 
 graph twoway ///
 	(area recess yearmth if ingraph==1 & rec_count==8, color(gs14)) ///
-	(tsline ppt8 if ingraph==1 & rec_count==8, yaxis(1) ytitle("Percentage point growth", axis(1))) ///
-	(tsline udif8 if ingraph==1 & rec_count==8, yaxis(2) ytitle("Percentage point growth", axis(2)))
+	(tsline index8 if ingraph==1 & rec_count==8, yaxis(1) ytitle("Index", axis(1))) ///
+	(tsline uindex8 if ingraph==1 & rec_count==8)
 ** problem with this is that the area command doesn't make the recession shading rectangular	
 	
+	
+g upper = .
 	
 ** label the variables 
 label variable recess "Recession"
 forvalues i = 1/12{
-	label variable ppt`i' "Initial Claims"
-	label variable udif`i' "Unemployment Rate"
+	label variable index`i' "Initial Claims"
+	label variable uindex`i' "Unemployment Rate"
 }
 label variable yearmth "Month"
 label variable upper "Recession"
+
 ** make a loop to generate the graphs 
-** needs to be tweaked each time to come out right
+
 
 forvalues i = 5/11 {
 	
-	summarize udif`i' if ingraph==1 & rec_count==`i', meanonly
+	summarize uindex`i' if ingraph==1 & rec_count==`i', meanonly
 	local umax = 5 * ceil(r(max)/5)
 	local umin = 5 * floor(r(max)/5)
 	display "`umax' `umin'"
 	
-	summarize ppt`i' if ingraph==1 & rec_count==`i', meanonly
+	summarize index`i' if ingraph==1 & rec_count==`i', meanonly
 	local cmax = 5 * ceil(r(max)/5)
 	local cmin = 5 * floor(r(max)/5)
 	display "`cmax' `cmin'"
@@ -135,14 +140,15 @@ forvalues i = 5/11 {
 	local max = max(`umax', `cmax')
 	local min = min(`umin', `cmin')
 	display "`max' `min'"
-	
+	local max = `max'
+	display "`max' `min'"
 	replace upper = `max' if recess==1 & rec_count==`i'
 	
 	
 	graph twoway ///
-	(line upper yearmth if ingraph==1 & rec_count==`i' & recess==1, recast(area) color(gs14)  plotregion(margin(zero)) base(`min') yaxis(2)) ///
-	(tsline ppt`i' if ingraph==1 & rec_count==`i', yaxis(1) ytitle("Percentage point growth", axis(1))) ///
-	(tsline udif`i' if ingraph==1 & rec_count==`i', yaxis(2) ytitle("Percentage point growth", axis(2)))
+	(line upper yearmth if ingraph==1 & rec_count==`i' & recess==1, recast(area) color(gs14)  plotregion(margin(zero)) base(90) yaxis(1)) ///
+	(tsline index`i' if ingraph==1 & rec_count==`i' & index`i'<=`max', yaxis(1) ytitle("Index", axis(1)) ylab(90 (10) `max')) ///
+	(tsline uindex`i' if ingraph==1 & rec_count==`i' & uindex`i'<=`max')
 	replace upper =.
 	
 	graph export "claims_urate_rec`i'.png", replace
@@ -151,12 +157,12 @@ forvalues i = 5/11 {
 ** the 12th recession is displaying weirdly so I need to tweak it manually
 forvalues i = 12/12 {
 	
-	summarize udif`i' if ingraph==1 & rec_count==`i', meanonly
+	summarize uindex`i' if ingraph==1 & rec_count==`i', meanonly
 	local umax = 5 * ceil(r(max)/5)
 	local umin = 5 * floor(r(max)/5)
 	display "`umax' `umin'"
 	
-	summarize ppt`i' if ingraph==1 & rec_count==`i', meanonly
+	summarize index`i' if ingraph==1 & rec_count==`i', meanonly
 	local cmax = 5 * ceil(r(max)/5)
 	local cmin = 5 * floor(r(max)/5)
 	display "`cmax' `cmin'"
@@ -164,14 +170,15 @@ forvalues i = 12/12 {
 	local max = max(`umax', `cmax')
 	local min = min(`umin', `cmin')
 	display "`max' `min'"
-	
+	local max = `max'
+	display "`max' `min'"
 	replace upper = `max' if recess==1 & rec_count==`i'
 	
 	
 	graph twoway ///
-	(line upper yearmth if ingraph==1 & rec_count==`i' & recess==1, recast(area) color(gs14)  plotregion(margin(zero)) base(0) yaxis(2)) ///
-	(tsline ppt`i' if ingraph==1 & rec_count==`i', yaxis(1) ytitle("Percentage point growth", axis(1))) ///
-	(tsline udif`i' if ingraph==1 & rec_count==`i', yaxis(2) ytitle("Percentage point growth", axis(2)))
+	(line upper yearmth if ingraph==1 & rec_count==`i' & recess==1, recast(area) color(gs14)  plotregion(margin(zero)) base(90) yaxis(1)) ///
+	(tsline index`i' if ingraph==1 & rec_count==`i' & index`i'<=`max', yaxis(1) ytitle("Index", axis(1)) ylab(100 (100) `max')) ///
+	(tsline uindex`i' if ingraph==1 & rec_count==`i' & uindex`i'<=`max')
 	replace upper =.
 	
 	graph export "claims_urate_rec`i'.png", replace
